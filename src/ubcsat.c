@@ -20,6 +20,7 @@
 
 */
 
+#include "mpp/shmem.h"
 #include "ubcsat.h"
 
 #ifdef __cplusplus 
@@ -61,6 +62,10 @@ int ubcsatmain(int argc, char *argv[]) {
   bTerminateAllRuns = 0;
 
   RunProcedures(PreStart);
+
+  printf("My id %d Seed %d\n", my_pe(), iSeed);
+  /* SHMEM sync */
+  shmem_barrier_all();
 
   StartTotalClock();
 
@@ -121,11 +126,15 @@ int ubcsatmain(int argc, char *argv[]) {
   }
 
   StopTotalClock();
+  /* SHMEM exit */
+  printf("====> Solved by PE %d found %d\n", my_pe(), iNumSolutionsFound);fflush(stdout);
 
   RunProcedures(FinalCalculations);
 
   RunProcedures(FinalReports);
 
+  /* SHMEM exit */
+  shmem_global_exit(iNumSolutionsFound > 0 ? 0:1);
   CleanExit();
 
   return(0);
@@ -136,6 +145,9 @@ char *myargv[100];
 int myargc = 0;
 
 int sparrowmain(int argc, char *argv[]) {
+
+  int seed;
+  char b_seed[128];
 
   if (argc != 3) {
     printf("ERROR Competition build requires 2 (and only 2) parameters: filename.cnf and seed\n");
@@ -148,7 +160,9 @@ int sparrowmain(int argc, char *argv[]) {
   myargv[myargc++] = argv[1];
 
   myargv[myargc++] = "-seed";
-  myargv[myargc++] = argv[2];
+  seed = atoi(argv[2]) * (1+my_pe());
+  sprintf(b_seed, "%d", seed);
+  myargv[myargc++] = b_seed;
 
   myargv[myargc++] = "-q";
 
@@ -181,6 +195,8 @@ int main(int argc, char *argv[]) {
 #else
 
 int main(int argc, char *argv[]) {
+  /* SHMEM bootstrap */
+  start_pes(0);
   return(sparrowmain(argc,argv));
 }
 
