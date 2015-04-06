@@ -23,9 +23,27 @@
 #include "mpp/shmem.h"
 #include "ubcsat.h"
 
+/* SHMEM globals */
+BOOL *rem_aVarValue;
+UINT32 *rem_iNumFalse;
+
+#define get_rem_avar(pe,i) (rem_aVarValue + iNumVars*pe +i)
+#define get_rem_inum(pe) (rem_iNumFalse + pe)
+
 #ifdef __cplusplus 
 namespace ubcsat {
 #endif
+
+static push_my_data(void) {
+    int i;
+    /* Bcast the data */
+    for (i = 0; i < num_pes(); i++) {
+        /* Push iNumFalse */
+        shmem_putmem_nb(get_rem_avar(my_pe(), 0), rem_aVarValue, iNumVars*sizeof(BOOL), i, NULL);
+        /* Push aVar*/
+        shmem_putmem_nb(get_rem_inum(my_pe()), rem_iNumFalse, sizeof(UINT32), i, NULL);
+    }
+}
 
 int ubcsatmain(int argc, char *argv[]) {
   
@@ -63,7 +81,20 @@ int ubcsatmain(int argc, char *argv[]) {
 
   RunProcedures(PreStart);
 
+  /* SHMEM allocate memory for remote access */
   printf("My id %d Seed %d\n", my_pe(), iSeed);
+  /* Vertor of values */
+  rem_aVarValue = shmalloc(iNumVars * sizeof(BOOL) * num_pes());
+  if (rem_aVarValue == NULL) {
+      fprintf(stderr, "Failed to allocate memory for rem_aVarValue\n"); fflush(stderr);
+      shmem_global_exit(1);
+  }
+  /* Cost of the current solution */
+  rem_iNumFalse = shmalloc(sizeof(UINT32) * num_pes());
+  if (rem_iNumFalse == NULL) {
+      fprintf(stderr, "Failed to allocate memory for rem_iNumFalse\n"); fflush(stderr);
+      shmem_global_exit(1);
+  }
   /* SHMEM sync */
   shmem_barrier_all();
 
