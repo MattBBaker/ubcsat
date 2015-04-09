@@ -23,9 +23,20 @@
 #include "mpp/shmem.h"
 #include "ubcsat.h"
 
+/* SHMEM global exit */
+#if defined(SGI) || defined(CRAY_704)
+#include <mpi.h>
+#define UBCSAT_GLOBAL_INIT() MPI_Init(NULL, NULL); //start_pes(0)
+#define UBCSAT_GLOBAL_EXIT(r) MPI_Abort(MPI_COMM_WORLD, r)
+#else
+#define UBCSAT_GLOBAL_INIT()  start_pes(0)
+#define UBCSAT_GLOBAL_EXIT(r) shmem_global_exit(r)
+#endif
+
 /* SHMEM globals */
 BOOL *rem_aVarValue;
 UINT32 *rem_iNumFalse;
+int *rem_counter;
 
 #define get_rem_avar(pe,i) (rem_aVarValue + iNumVars*pe +i)
 #define get_rem_inum(pe) (rem_iNumFalse + pe)
@@ -37,12 +48,20 @@ namespace ubcsat {
 static push_my_data(void) {
     int i;
     /* Bcast the data */
-    for (i = 0; i < num_pes(); i++) {
+    for (i = 0; i < shmem_n_pes(); i++) {
         /* Push iNumFalse */
-        shmem_putmem_nb(get_rem_avar(my_pe(), 0), rem_aVarValue, iNumVars*sizeof(BOOL), i, NULL);
-        /* Push aVar*/
-        shmem_putmem_nb(get_rem_inum(my_pe()), rem_iNumFalse, sizeof(UINT32), i, NULL);
+        shmem_putmem_nb(get_rem_avar(shmem_my_pe(), 0), rem_aVarValue, iNumVars*sizeof(BOOL), i, NULL);
+        /* Push aVar */
+        shmem_putmem_nb(get_rem_inum(shmem_my_pe()), rem_iNumFalse, sizeof(UINT32), i, NULL);
+        /* Anounce update */
+        shmem_fence();
+        shmem_int_inc(rem_counter, i);
     }
+}
+
+/* Sync the data */
+static sync_data(void) {
+    shmem_quiet();
 }
 
 int ubcsatmain(int argc, char *argv[]) {
@@ -82,18 +101,18 @@ int ubcsatmain(int argc, char *argv[]) {
   RunProcedures(PreStart);
 
   /* SHMEM allocate memory for remote access */
-  printf("My id %d Seed %d\n", my_pe(), iSeed);
+  printf("My id %d Seed %d\n", shmem_my_pe(), iSeed);
   /* Vertor of values */
-  rem_aVarValue = shmalloc(iNumVars * sizeof(BOOL) * num_pes());
+  rem_aVarValue = shmalloc(iNumVars * sizeof(BOOL) * shmem_n_pes());
   if (rem_aVarValue == NULL) {
       fprintf(stderr, "Failed to allocate memory for rem_aVarValue\n"); fflush(stderr);
-      shmem_global_exit(1);
+      UBCSAT_GLOBAL_EXIT(1);
   }
   /* Cost of the current solution */
-  rem_iNumFalse = shmalloc(sizeof(UINT32) * num_pes());
+  rem_iNumFalse = shmalloc(sizeof(UINT32) * shmem_n_pes());
   if (rem_iNumFalse == NULL) {
       fprintf(stderr, "Failed to allocate memory for rem_iNumFalse\n"); fflush(stderr);
-      shmem_global_exit(1);
+      UBCSAT_GLOBAL_EXIT(1);
   }
   /* SHMEM sync */
   shmem_barrier_all();
@@ -158,14 +177,14 @@ int ubcsatmain(int argc, char *argv[]) {
 
   StopTotalClock();
   /* SHMEM exit */
-  printf("====> Solved by PE %d found %d\n", my_pe(), iNumSolutionsFound);fflush(stdout);
+  printf("====> Solved by PE %d found %d\n", shmem_my_pe(), iNumSolutionsFound);fflush(stdout);
 
   RunProcedures(FinalCalculations);
 
   RunProcedures(FinalReports);
 
   /* SHMEM exit */
-  shmem_global_exit(iNumSolutionsFound > 0 ? 0:1);
+  UBCSAT_GLOBAL_EXIT(iNumSolutionsFound > 0 ? 0:1);
   CleanExit();
 
   return(0);
@@ -191,7 +210,7 @@ int sparrowmain(int argc, char *argv[]) {
   myargv[myargc++] = argv[1];
 
   myargv[myargc++] = "-seed";
-  seed = atoi(argv[2]) * (1+my_pe());
+  seed = atoi(argv[2]) * (1+shmem_my_pe());
   sprintf(b_seed, "%d", seed);
   myargv[myargc++] = b_seed;
 
@@ -227,7 +246,7 @@ int main(int argc, char *argv[]) {
 
 int main(int argc, char *argv[]) {
   /* SHMEM bootstrap */
-  start_pes(0);
+  UBCSAT_GLOBAL_INIT();
   return(sparrowmain(argc,argv));
 }
 
