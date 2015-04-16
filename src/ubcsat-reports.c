@@ -2299,6 +2299,7 @@ void ReportSatCompetitionPrint() {
       }
     }
     ReportPrint(pRepSATComp," 0\n");
+    ReportPrint1(pRepSATComp,"c SearchIterations = %"P64"\n",iRun);
     ReportPrint1(pRepSATComp,"c SearchSteps = %"P64"\n",iStep);
     ReportPrint1(pRepSATComp,"c SolveTime = %g\n",fTotalTime);
     exit(10);

@@ -52,5 +52,6 @@
 
 #include "mylocal.h"
 
+extern double *Prop;
 #endif
 

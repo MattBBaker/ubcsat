@@ -21,6 +21,7 @@
 */
 
 #include "ubcsat.h"
+#include <assert.h>
 
 #ifdef __cplusplus 
 namespace ubcsat {
@@ -1408,11 +1409,32 @@ void DefaultInitVars() {
       iNextAlternating = !iNextAlternating;
     } else {
       if (aVarInit[j] == 2) {
+#ifdef SHMEM_PROP
+          if (iRun == 1) {
+              // fprintf(stdout,"First init %d\n", iRun); fflush(stdout);
+              if (RandomInt(2)) {
+                  aVarValue[j] = 1;
+              } else {
+                  aVarValue[j] = 0;
+              }
+          } else {
+              // fprintf(stdout,"Non-First init %d %f %f\n", iRun, RandomFloat(), Prop[j]); fflush(stdout);
+              double rnd = RandomFloat();
+              assert(rnd >= 0 && rnd <=1);
+
+              if (RandomFloat() < Prop[j]) {
+                  aVarValue[j] = 1;
+              } else {
+                  aVarValue[j] = 0;
+              }
+          }
+#else 
         if (RandomInt(2)) {
           aVarValue[j] = 1;
         } else {
           aVarValue[j] = 0;
         }
+#endif
       } else {
         if (aVarInit[j]) {
           aVarValue[j] = 1;
