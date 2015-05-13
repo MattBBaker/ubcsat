@@ -28,7 +28,7 @@
 #if defined(SGI) || defined(CRAY_704)
 #include <mpi.h>
 #define UBCSAT_GLOBAL_INIT() MPI_Init(NULL, NULL); //start_pes(0)
-#define UBCSAT_GLOBAL_EXIT(r) MPI_Abort(MPI_COMM_WORLD, r)
+#define UBCSAT_GLOBAL_EXIT(r) fflush(stdout);fflush(stderr);MPI_Abort(MPI_COMM_WORLD, r)
 #else
 #define UBCSAT_GLOBAL_INIT()  start_pes(0)
 #define UBCSAT_GLOBAL_EXIT(r) shmem_global_exit(r)
@@ -108,8 +108,8 @@ static int calc_NormW()
         }
     }
 
-#if 1
-    fprintf(stdout,"[%d] Number of updates %d mag %f norm %f\n",shmem_my_pe(), num_updates, magnitude, NormWsum); fflush(stdout);
+#if DEBUG
+    // fprintf(stdout,"[%d] Number of updates %d mag %f norm %f\n",shmem_my_pe(), num_updates, magnitude, NormWsum); fflush(stdout);
 #endif
 
     for (v = 0; v < iNumVars; v++) {
@@ -201,6 +201,7 @@ int ubcsatmain(int argc, char *argv[]) {
   RunProcedures(PreStart);
 
   /* Init Norm/Prob vectors */
+  if (shmem_n_pes() > 1) {
   NormW = calloc(sizeof(double), shmem_n_pes());
   if (NormW == NULL) {
       fprintf(stderr, "Failed to allocate memory for NormW\n"); fflush(stderr);
@@ -253,6 +254,7 @@ int ubcsatmain(int argc, char *argv[]) {
   memset(rem_counter, 0, sizeof(long long) * shmem_n_pes());
   /* SHMEM sync */
   shmem_barrier_all();
+  }
 
   StartTotalClock();
 
@@ -352,7 +354,9 @@ int ubcsatmain(int argc, char *argv[]) {
   RunProcedures(FinalReports);
 
   /* SHMEM exit */
+  if (shmem_n_pes() > 1) {
   UBCSAT_GLOBAL_EXIT(iNumSolutionsFound > 0 ? 0:1);
+  }
   CleanExit();
 
   return(0);
